@@ -3,13 +3,32 @@ package com.example;
 import com.example.api.ElpriserAPI;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
+import java.time.chrono.ChronoZonedDateTime;
 import java.util.List;
+import java.util.regex.Pattern;
 
 public class Main {
 
     public static void main(String[] args) {
+
         ElpriserAPI elpriserAPI = new ElpriserAPI();
+        ElpriserAPI.Prisklass zon;
+        //set some default values
+        LocalDate date = LocalDate.now();
+        boolean sorted = false;
+        int window = 24;
+
+        //prompt for zone if no arguments were entered
+        if (args.length < 1) {
+            zon = ElpriserAPI.Prisklass.valueOf(System.console().readLine("Zon: "));
+        }
+        else {
+            for (int i = 0; i <= args.length; i++) {
+                if (args[i].matches("--SE0")) {
+                    zon = ElpriserAPI.Prisklass.valueOf(args[i]);
+                }
+            }
+        }
     }
 
     //get the list of prices for today in specified area
@@ -20,6 +39,21 @@ public class Main {
     //get the list of prices for tomorrow in specified area
     private static List<ElpriserAPI.Elpris> priceTomorrow (ElpriserAPI elpriserAPI, ElpriserAPI.Prisklass zon) {
         return elpriserAPI.getPriser(LocalDate.now().plusDays(1), zon);
+    }
+
+    private static List<ElpriserAPI.Elpris> priceRealDay (ElpriserAPI elpriserAPI, ElpriserAPI.Prisklass zon) {
+        List <ElpriserAPI.Elpris> today = priceToday(elpriserAPI, zon);
+        for (int i = today.indexOf(today.getFirst()); i > today.size(); i++) {
+            if(today.get(i).timeEnd().isBefore(ChronoZonedDateTime.from(LocalDate.now()))){
+                today.remove(i);
+            }
+        }
+        today.addAll(priceTomorrow(elpriserAPI,zon));
+        return today;
+    }
+
+    private static List<ElpriserAPI.Elpris> priceOnDate (ElpriserAPI elpriserAPI,ElpriserAPI.Prisklass zon, LocalDate date) {
+        return elpriserAPI.getPriser(date, zon);
     }
 
     //calculate and return the mean price for the provided list
@@ -61,7 +95,7 @@ public class Main {
     private static List<ElpriserAPI.Elpris> optimalWindow (List<ElpriserAPI.Elpris> elpriser, int duration) {
         List<ElpriserAPI.Elpris> window = elpriser.subList(0, duration-1);          //create a new list and fill with the desired number of values
         for  (int i = 1; i<elpriser.size()-duration; i++) {                         //iterate all possible windows, stop when the first value is the last avilble for the desired window
-            if (meanPrice(window) < meanPrice(elpriser.subList(i,i+duration-1))){   //itarate possible windows, if it is cheaper set it as the return value
+            if (meanPrice(window) < meanPrice(elpriser.subList(i,i+duration-1))){   //iterate possible windows, if it is cheaper set it as the return value
                 window = elpriser.subList(i,i+duration-1);
             }
         }
