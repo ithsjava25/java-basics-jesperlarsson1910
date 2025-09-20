@@ -11,6 +11,8 @@ public class Main {
 
     public static void main(String[] args) {
 
+        System.out.println(Pattern.matches("^--zone SE[1-4]$", "--zone SE4"));
+
         ElpriserAPI elpriserAPI = new ElpriserAPI();
         ElpriserAPI.Prisklass zon;
         //set some default values
@@ -22,10 +24,28 @@ public class Main {
         if (args.length < 1) {
             zon = ElpriserAPI.Prisklass.valueOf(System.console().readLine("Zon: "));
         }
+        //parse given arguments. if any of the arguments are incorrectly entered it is displayed with the help function before breaking the loop
         else {
             for (int i = 0; i <= args.length; i++) {
-                if (args[i].matches("--SE0")) {
-                    zon = ElpriserAPI.Prisklass.valueOf(args[i]);
+                if (Pattern.matches("^--zone SE[1-4]$", args[i])) {
+                    zon = ElpriserAPI.Prisklass.valueOf(args[i].substring(7));
+                }
+                else if (Pattern.matches("^--date \\d{4}-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])$", args[i])) {
+                    date = LocalDate.parse(args[i].substring(7));
+                }
+                else if (Pattern.matches("^--charging [248]h$", args[i])) {
+                    window = Integer.parseInt(String.valueOf(args[i].charAt(12)));
+                }
+                else if (args[i].equals("--sorted")) {
+                    sorted = true;
+                }
+                else if (args[0].equals("--help")) {
+                    help();
+                }
+                else{
+                    System.out.println("Invalid argument" + args[i]);
+                    help();
+                    break;
                 }
             }
         }
@@ -94,11 +114,20 @@ public class Main {
     //find the cheapest window of the provided prices and duration
     private static List<ElpriserAPI.Elpris> optimalWindow (List<ElpriserAPI.Elpris> elpriser, int duration) {
         List<ElpriserAPI.Elpris> window = elpriser.subList(0, duration-1);          //create a new list and fill with the desired number of values
-        for  (int i = 1; i<elpriser.size()-duration; i++) {                         //iterate all possible windows, stop when the first value is the last avilble for the desired window
+        for  (int i = 1; i<elpriser.size()-duration; i++) {                         //iterate all possible windows, stop when the first value is the last available for the desired window
             if (meanPrice(window) < meanPrice(elpriser.subList(i,i+duration-1))){   //iterate possible windows, if it is cheaper set it as the return value
                 window = elpriser.subList(i,i+duration-1);
             }
         }
         return window;
+    }
+
+    private static void help(){
+        System.out.println("Commands:\n" +
+                            "--zone SE1|SE2|SE3|SE4 (required)\n" +
+                            "--date YYYY-MM-DD\n" +
+                            "--sorted\n" +
+                            "--charging 2h|4h|8h\n" +
+                            "--help");
     }
 }
