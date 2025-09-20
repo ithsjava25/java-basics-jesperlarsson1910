@@ -11,8 +11,6 @@ public class Main {
 
     public static void main(String[] args) {
 
-        System.out.println(Pattern.matches("^--zone SE[1-4]$", "--zone SE4"));
-
         ElpriserAPI elpriserAPI = new ElpriserAPI();
         ElpriserAPI.Prisklass zon;
         //set some default values
