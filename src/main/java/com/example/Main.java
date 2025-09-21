@@ -12,27 +12,27 @@ public class Main {
     public static void main(String[] args) {
 
         ElpriserAPI elpriserAPI = new ElpriserAPI();
-        ElpriserAPI.Prisklass zon;
+        ElpriserAPI.Prisklass zon = null;
         //set some default values
         LocalDate date = LocalDate.now();
         boolean sorted = false;
         int window = 24;
 
         //prompt for zone if no arguments were entered
-        if (args.length < 1) {
+        if (args.length < 2) {
             zon = ElpriserAPI.Prisklass.valueOf(System.console().readLine("Zon: "));
         }
         //parse given arguments. if any of the arguments are incorrectly entered it is displayed with the help function before breaking the loop
         else {
-            for (int i = 0; i <= args.length; i++) {
-                if (Pattern.matches("^--zone SE[1-4]$", args[i])) {
-                    zon = ElpriserAPI.Prisklass.valueOf(args[i].substring(7));
+            for (int i = 0; i < args.length; i+=2) {
+                if (args[i].equals("--zone") && Pattern.matches("^SE[1-4]$", args[i+1])) {
+                    zon = ElpriserAPI.Prisklass.valueOf(args[i+1]);
                 }
-                else if (Pattern.matches("^--date \\d{4}-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])$", args[i])) {
-                    date = LocalDate.parse(args[i].substring(7));
+                else if (args[i].equals("--date") && Pattern.matches("^\\d{4}-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])$", args[i+1])) {
+                    date = LocalDate.parse(args[i+1]);
                 }
-                else if (Pattern.matches("^--charging [248]h$", args[i])) {
-                    window = Integer.parseInt(String.valueOf(args[i].charAt(12)));
+                else if (args[i].equals("--charging") && Pattern.matches("^[248]h$", args[i+1])) {
+                    window = Integer.parseInt(String.valueOf(args[i+1].charAt(0)));
                 }
                 else if (args[i].equals("--sorted")) {
                     sorted = true;
@@ -59,14 +59,16 @@ public class Main {
         return elpriserAPI.getPriser(LocalDate.now().plusDays(1), zon);
     }
 
+    //if possible create list of prices that are still upcoming
     private static List<ElpriserAPI.Elpris> priceRealDay (ElpriserAPI elpriserAPI, ElpriserAPI.Prisklass zon) {
         List <ElpriserAPI.Elpris> today = priceToday(elpriserAPI, zon);
-        for (int i = today.indexOf(today.getFirst()); i > today.size(); i++) {
-            if(today.get(i).timeEnd().isBefore(ChronoZonedDateTime.from(LocalDate.now()))){
-                today.remove(i);
+        while (true) {  //checks and removes first object if the time has passed, breaks after
+            if(today.get(1).timeEnd().isBefore(ChronoZonedDateTime.from(LocalDate.now()))){
+                today.remove(1);
             }
+            else break;
         }
-        today.addAll(priceTomorrow(elpriserAPI,zon));
+        today.addAll(priceTomorrow(elpriserAPI,zon)); //add tomorrow's prices to the end of the trimmed list
         return today;
     }
 
