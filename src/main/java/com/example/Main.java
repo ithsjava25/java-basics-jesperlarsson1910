@@ -205,7 +205,7 @@ public class Main {
         if(!elpriser.isEmpty() && elpriser.size() > duration) {
             List<ElpriserAPI.Elpris> window = elpriser.subList(0, duration);          //create a new list and fill with the desired number of values
             for (int i = 1; i < elpriser.size() - duration; i++) {                         //iterate all possible windows, stop when the first value is the last available for the desired window
-                if (meanPrice(window) < meanPrice(elpriser.subList(i, i + duration))) {   //iterate possible windows, if it is cheaper set it as the return value
+                if (meanPrice(window) > meanPrice(elpriser.subList(i, i + duration))) {   //iterate possible windows, if it is cheaper set it as the return value
                     window = elpriser.subList(i, i + duration);
                 }
             }
