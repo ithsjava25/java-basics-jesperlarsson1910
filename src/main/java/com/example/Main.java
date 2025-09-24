@@ -2,7 +2,8 @@ package com.example;
 
 import com.example.api.ElpriserAPI;
 
-import java.text.NumberFormat;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -64,16 +65,23 @@ public class Main {
 
                             if (window != 24) { //if a valid charging window was requested print it
                                 if (sorted) {
-                                    printChargeStat(sortedPrices(optimalWindow(priceRealDay(elpriserAPI, zon, date), window)));
+                                    printChargeStat(sortedPrices(optimalWindow(priceRealDay(elpriserAPI, zon, date), window), "price"));
                                 } else {
                                     printChargeStat(optimalWindow(priceRealDay(elpriserAPI, zon, date), window));
                                 }
 
                             } else if (sorted) {
-                                printStats(sortedPrices(priceOnDate(elpriserAPI, zon, date)));
-
+                                if(priceOnDate(elpriserAPI, zon, date).size()<=24) {
+                                    printStats(sortedPrices(priceRealDay(elpriserAPI, zon, date), "price"));
+                                }
+                                else printCombined(sortedPrices(priceRealDay(elpriserAPI, zon, date), "price"));
                             } else {
-                                printStats(priceOnDate(elpriserAPI, zon, date));
+                                if(priceOnDate(elpriserAPI, zon, date).size()<=24) {
+                                    printStats(priceRealDay(elpriserAPI, zon, date));
+                                }
+                                else {
+                                    printCombined(priceRealDay(elpriserAPI, zon, date));
+                                }
                             }
                         }
                     }
@@ -103,7 +111,7 @@ public class Main {
      * @return List of {@link ElpriserAPI.Elpris} for specified {@link LocalDate}, will be empty if not available
      */
     private static List<ElpriserAPI.Elpris> priceOnDate (ElpriserAPI elpriserAPI,ElpriserAPI.Prisklass zon, LocalDate date) {
-        return elpriserAPI.getPriser(date, zon);
+            return elpriserAPI.getPriser(date, zon);
     }
 
     /**
@@ -127,6 +135,33 @@ public class Main {
         today.addAll(tomorrow);
         return  today;
     }
+
+    private static List<ElpriserAPI.Elpris> combineSameHour(List<ElpriserAPI.Elpris> prices) {
+        if (prices.isEmpty()) return prices;
+        else {
+            prices.add(prices.getFirst()); //add padding so we can iterate al element
+            List<ElpriserAPI.Elpris> combined = new ArrayList<>();
+            List<ElpriserAPI.Elpris> temp = new ArrayList<>();
+
+            for (int i = 0; i < prices.size()-1; i++) {
+
+                if (prices.get(i).timeStart().getHour() == (prices.get(i + 1).timeStart().getHour())) {
+                    temp.add(prices.get(i));
+                } else {
+                    temp.add(prices.get(i));
+                    combined.add(new ElpriserAPI.Elpris(
+                            meanPrice(temp),
+                            meanPriceEur(temp),
+                            prices.get(i).exr(),
+                            prices.get(i).timeStart(),
+                            prices.get(i).timeEnd()
+                    ));
+                    temp.clear();
+                }
+            }
+            return combined;
+        }
+    }
     
 
     /**
@@ -134,8 +169,13 @@ public class Main {
      *
      * @param elpriser List of {@link ElpriserAPI.Elpris}
      */
-    private static List<ElpriserAPI.Elpris> sortedPrices(List<ElpriserAPI.Elpris> elpriser){
-        elpriser.sort(Comparator.comparingDouble(ElpriserAPI.Elpris::sekPerKWh));
+    private static List<ElpriserAPI.Elpris> sortedPrices(List<ElpriserAPI.Elpris> elpriser, String key ) {
+        switch (key.toUpperCase()) {
+            case "PRICE" -> elpriser.sort(Comparator.comparingDouble(ElpriserAPI.Elpris::sekPerKWh).reversed());
+            case "TIME" -> elpriser.sort(Comparator.comparing(ElpriserAPI.Elpris::timeStart));
+
+            default -> System.out.println("Invalid key");
+        }
         return elpriser;
     }
 
@@ -150,6 +190,17 @@ public class Main {
             double sum = 0.0;
             for (int i = 0; i < elpriser.size(); i++) {
                 sum += elpriser.get(i).sekPerKWh();
+            }
+            return sum / elpriser.size();
+        }
+        return 0.0;
+    }
+
+    private static double meanPriceEur(List<ElpriserAPI.Elpris> elpriser) {
+        if(!elpriser.isEmpty()) {
+            double sum = 0.0;
+            for (int i = 0; i < elpriser.size(); i++) {
+                sum += elpriser.get(i).eurPerKWh();
             }
             return sum / elpriser.size();
         }
@@ -204,7 +255,7 @@ public class Main {
     private static List<ElpriserAPI.Elpris> optimalWindow (List<ElpriserAPI.Elpris> elpriser, int duration) {
         if(!elpriser.isEmpty() && elpriser.size() > duration) {
             List<ElpriserAPI.Elpris> window = elpriser.subList(0, duration);          //create a new list and fill with the desired number of values
-            for (int i = 1; i < elpriser.size() - duration; i++) {                         //iterate all possible windows, stop when the first value is the last available for the desired window
+            for (int i = 1; i <= elpriser.size() - duration; i++) {                         //iterate all possible windows, stop when the first value is the last available for the desired window
                 if (meanPrice(window) > meanPrice(elpriser.subList(i, i + duration))) {   //iterate possible windows, if it is cheaper set it as the return value
                     window = elpriser.subList(i, i + duration);
                 }
@@ -232,24 +283,41 @@ public class Main {
         }
     }
 
+    private static String formatPrice(double price) {
+        DecimalFormatSymbols dfs = new DecimalFormatSymbols(new Locale("sv", "SE"));
+        DecimalFormat df = new DecimalFormat("0.00", dfs);
+
+        return df.format(price*100);
+    }
+
+    private static String formatTime(ZonedDateTime time) {
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH");
+
+        return dtf.format(time);
+    }
+
     /**
      * Prints a provided list of {@link ElpriserAPI.Elpris} formatted to "HH-HH"   "0,00 öre"
      * @param elpriser list to be printed
      */
     static void printList (List<ElpriserAPI.Elpris> elpriser) {
-        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH");
-        NumberFormat nf = NumberFormat.getInstance(Locale.GERMAN); nf.setMinimumFractionDigits(2); nf.setMaximumFractionDigits(2);
+
 
         for (ElpriserAPI.Elpris elpris : elpriser) {
-            System.out.println(dtf.format(elpris.timeStart()) + "-"
-                    + dtf.format(elpris.timeEnd()) + " "
-                    +  nf.format(elpris.sekPerKWh()*100) + " öre");
+            System.out.println(formatTime(elpris.timeStart()) + "-"
+                    + formatTime(elpris.timeEnd()) + " "
+                    +  formatPrice(elpris.sekPerKWh()) + " öre");
         }
     }
 
-    static void printMean (List<ElpriserAPI.Elpris> elpriser) {
-        NumberFormat nf = NumberFormat.getInstance(Locale.GERMAN); nf.setMaximumFractionDigits(2);
-        System.out.println("Medelpris: " + nf.format(meanPrice(elpriser)*100) + " öre");
+    static void printMean (List<ElpriserAPI.Elpris> elpriser, boolean chargingWindow) {
+
+        if (chargingWindow) {
+            System.out.println("Medelpris för fönster: " + formatPrice(meanPrice(elpriser)) + " öre");
+        }
+        else {
+            System.out.println("Medelpris: " + formatPrice(meanPrice(elpriser)) + " öre");
+        }
     }
 
 
@@ -258,22 +326,39 @@ public class Main {
      * @param elpriser list of objects to print from
      */
     static void printStats (List<ElpriserAPI.Elpris> elpriser) {
-        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH");
-        NumberFormat nf = NumberFormat.getInstance(Locale.GERMAN); nf.setMaximumFractionDigits(2);
 
         printList(elpriser);
 
         ElpriserAPI.Elpris output = minPrice(elpriser); //call once instead of checking for every output
-        System.out.println("\nLägsta pris: " + dtf.format(output.timeStart()) + "-"
-                + dtf.format(output.timeEnd()) + " "
-                +  nf.format(output.sekPerKWh()*100) + " öre");
+        System.out.println("\nLägsta pris: " + formatTime(output.timeStart()) + "-"
+                + formatTime(output.timeEnd()) + " "
+                +  formatPrice(output.sekPerKWh()) + " öre");
 
         output = maxPrice(elpriser);
-        System.out.println("Högsta pris: " + dtf.format(output.timeStart()) + "-"
-                + dtf.format(output.timeEnd()) + " "
-                +  nf.format(output.sekPerKWh()*100) + " öre");
+        System.out.println("Högsta pris: " + formatTime(output.timeStart()) + "-"
+                + formatTime(output.timeEnd()) + " "
+                +  formatPrice(output.sekPerKWh()) + " öre");
 
-        printMean(elpriser);
+        printMean(elpriser, false);
+    }
+
+    static void printCombined (List<ElpriserAPI.Elpris> elpriser) {
+        //printStats(elpriser);
+        printList(combineSameHour(elpriser));
+
+
+        ElpriserAPI.Elpris output = minPrice(combineSameHour(elpriser)); //call once instead of checking for every output
+        System.out.println("\nLägsta pris: " + formatTime(output.timeStart()) + "-"
+                + formatTime(output.timeEnd()) + " "
+                +  formatPrice(output.sekPerKWh()) + " öre");
+
+        output = maxPrice(combineSameHour(elpriser));
+        System.out.println("Högsta pris: " + formatTime(output.timeStart()) + "-"
+                + formatTime(output.timeEnd()) + " "
+                +  formatPrice(output.sekPerKWh()) + " öre");
+
+        printMean(combineSameHour(elpriser), false);
+
     }
 
     /**
@@ -281,22 +366,14 @@ public class Main {
      * @param elpriser charging window as a list
      */
     static void printChargeStat (List<ElpriserAPI.Elpris> elpriser) {
-        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm");
-        NumberFormat nf = NumberFormat.getInstance(Locale.GERMAN); nf.setMaximumFractionDigits(2);
 
         if(!elpriser.isEmpty()) {
-            ElpriserAPI.Elpris earliest = elpriser.getFirst();
-
-            //the list might be sorted so we need to find the first chronological time to print
-            for (int i = 1; i < elpriser.size(); i++) {
-                if (earliest.timeStart().isBefore(elpriser.get(i).timeStart())) {
-                    earliest = elpriser.get(i);
-                }
-            }
+            //find earliest if the list is sorted by price
+            ElpriserAPI.Elpris earliest = sortedPrices(elpriser, "time").getFirst();
 
 
-            System.out.println("Påbörja laddning: " + dtf.format(earliest.timeStart()));
-            printMean(elpriser);
+            System.out.println("Påbörja laddning: kl " + formatTime(earliest.timeStart()) + ":00");
+            printMean(elpriser, true);
             System.out.println();//For formatting
             printList(elpriser);
         }
