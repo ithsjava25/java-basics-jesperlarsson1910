@@ -142,7 +142,7 @@ class MainTest {
         assertThat(output).contains("02-03"); // Most expensive hour (0.80)
         assertThat(output).contains("10,00"); // 10 öre (cheapest)
         assertThat(output).contains("80,00"); // 80 öre (most expensive)
-        assertThat(output).contains("80,00"); // 42,50 öre (medelpris)
+        assertThat(output).contains("42,50"); // 42,50 öre (medelpris)
     }
 
     @Test
@@ -168,7 +168,7 @@ class MainTest {
 
         String output = bos.toString();
 
-        // Expected sorted output (ascending by price)
+        // Expected sorted output (descending by price)
         List<String> expectedOrder = List.of(
                 "20-21 30,00 öre",
                 "22-23 20,00 öre",
