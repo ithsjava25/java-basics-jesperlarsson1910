@@ -24,7 +24,7 @@ jobs:
     permissions:
       pull-requests: write
     env:
-      OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
+      OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
       SYSTEM_PROMPT: ${{ vars.SYSTEM_PROMPT }}
     steps:
       - name: Checkout repository
@@ -101,11 +101,11 @@ jobs:
           ${TEST_CODE}"
           
           JSON_CONTENT=$(jq -n \
-          --arg model "$OPENROUTER_MODEL" \
+          --argjson model "$OPENROUTER_MODEL" \
           --arg system_prompt "$SYSTEM_PROMPT" \
           --arg payload "$PAYLOAD" \
           '{
-          model: $model,
+          models: $model,
           messages: [
             {role: "system", content: $system_prompt},
             {role: "user", content: $payload}
@@ -127,7 +127,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Post Feedback as PR Comment ✍️
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           FEEDBACK_BODY: ${{ steps.ai_feedback.outputs.feedback }}
         with:
