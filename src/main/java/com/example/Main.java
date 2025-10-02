@@ -232,10 +232,17 @@ public class Main {
      */
     private static List<ElpriserAPI.Elpris> optimalWindow (List<ElpriserAPI.Elpris> elpriser, int duration) {
         if(!elpriser.isEmpty() && elpriser.size() > duration) {
-            List<ElpriserAPI.Elpris> window = elpriser.subList(0, duration);          //create a new list and fill with the desired number of values
-            for (int i = 1; i <= elpriser.size() - duration; i++) {                         //iterate all possible windows, stop when the first value is the last available for the desired window
-                if (meanPrice(window) > meanPrice(elpriser.subList(i, i + duration))) {   //iterate possible windows, if it is cheaper set it as the return value
-                    window = elpriser.subList(i, i + duration);
+            List<ElpriserAPI.Elpris> window = elpriser.subList(0, duration);//create a new list and fill with the desired number of values
+
+            double minValue = 0; for(int k = 0; k < duration; k++) { minValue += elpriser.get(k).sekPerKWh();} //create and set value of first window to compare
+            double sliding = minValue; //value that will change with every window
+
+            for (int i = duration; i < elpriser.size(); i++) { //iterate all possible windows, stop when the first value is the last available for the desired window
+                sliding += elpriser.get(i).sekPerKWh() - elpriser.get(i-duration).sekPerKWh();
+
+                if (minValue > sliding) {   //if the checked window is lesser set it as the return value
+                    minValue = sliding;
+                    window = elpriser.subList(i-duration+1, i+1);
                 }
             }
             return window;
