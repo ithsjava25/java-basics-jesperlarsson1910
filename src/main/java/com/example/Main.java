@@ -130,7 +130,7 @@ public class Main {
         return new ElpriserAPI.Elpris(
                 meanPrice(temp),
                 meanPriceEur(temp),
-                temp.getFirst().exr(),
+                meanEXR(temp),
                 temp.getFirst().timeStart(),
                 temp.getLast().timeEnd()
         );
@@ -181,6 +181,23 @@ public class Main {
             double sum = 0.0;
             for (int i = 0; i < elpriser.size(); i++) {
                 sum += elpriser.get(i).eurPerKWh();
+            }
+            return sum / elpriser.size();
+        }
+        return 0.0;
+    }
+
+    /**
+     * Calculates the mean exr for a list of {@link ElpriserAPI.Elpris} in SEK
+     *
+     * @param elpriser List of {@link ElpriserAPI.Elpris}
+     * @return The mean exr for the provided list
+     */
+    private static double meanEXR(List<ElpriserAPI.Elpris> elpriser) {
+        if(!elpriser.isEmpty()) {
+            double sum = 0.0;
+            for (int i = 0; i < elpriser.size(); i++) {
+                sum += elpriser.get(i).exr();
             }
             return sum / elpriser.size();
         }
@@ -334,17 +351,18 @@ public class Main {
      */
     static void printStats (List<ElpriserAPI.Elpris> elpriser) {
 
+        ElpriserAPI.Elpris min = minPrice(elpriser); //call once instead of checking for every output
+        ElpriserAPI.Elpris max = minPrice(elpriser);
+
         printList(elpriser);
 
-        ElpriserAPI.Elpris output = minPrice(elpriser); //call once instead of checking for every output
-        System.out.println("\nLägsta pris: " + formatTime(output.timeStart()) + "-"
-                + formatTime(output.timeEnd()) + " "
-                +  formatPrice(output.sekPerKWh()) + " öre");
+        System.out.println("\nLägsta pris: " + formatTime(min.timeStart()) + "-"
+                + formatTime(min.timeEnd()) + " "
+                +  formatPrice(min.sekPerKWh()) + " öre");
 
-        output = maxPrice(elpriser);
-        System.out.println("Högsta pris: " + formatTime(output.timeStart()) + "-"
-                + formatTime(output.timeEnd()) + " "
-                +  formatPrice(output.sekPerKWh()) + " öre");
+        System.out.println("Högsta pris: " + formatTime(max.timeStart()) + "-"
+                + formatTime(max.timeEnd()) + " "
+                +  formatPrice(max.sekPerKWh()) + " öre");
 
         printMean(elpriser, false);
     }
@@ -373,24 +391,22 @@ public class Main {
     private static boolean parseArgs(String[] args) {
         Map<String, String> argMap = new HashMap<>();
 
-        try {
-            for (int i = 0; i < args.length; i += 2) {
-                switch (args[i]) {
-                    case "--zone", "--charging", "--date" -> argMap.put(args[i], args[i + 1]);
-                    case "--sorted", "--help" -> {
-                        argMap.put(args[i], "true");
-                        i--;
-                    }
-
-                    default -> {
-                        throw new IllegalArgumentException("Invalid argument: " + args[i]);
-                    }
-                }
-
+        for (int i = 0; i < args.length; i ++) {
+            switch (args[i]) {
+                case "--zone", "--charging", "--date" -> argMap.put(args[i], args[i + 1]);
+                case "--sorted", "--help" -> argMap.put(args[i], "true");
             }
-        } catch (IllegalArgumentException e) {
-            System.out.println(e.getMessage());
-            return false;
+        }
+
+        for (Map.Entry entry :argMap.entrySet()){
+            switch (entry.getKey().toString()) {
+                case "--zone", "--charging", "--date", "--sorted", "--help" -> {}
+
+                default -> {
+                    System.out.println("Invalid argument: " + entry.getKey());
+                    return false;
+                }
+            }
         }
 
         if (argMap.containsKey("--zone") && Pattern.matches("^SE[1-4]$", argMap.get("--zone"))) {
@@ -422,6 +438,7 @@ public class Main {
 
                     case "--help" -> {
                         help();
+                        return false;
                     }
                 }
             }
