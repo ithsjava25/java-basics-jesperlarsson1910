@@ -141,16 +141,14 @@ public class Main {
      *
      * @param elpriser List of {@link ElpriserAPI.Elpris}
      * @param key what the list should be sorted by {@code PRICE} or {@code TIME}
-     * @return sorted list, if incorrect key was provided list will be returned unsorted
      */
-    private static List<ElpriserAPI.Elpris> sortedPrices(List<ElpriserAPI.Elpris> elpriser, String key ) {
+    private static void sortedPrices(List<ElpriserAPI.Elpris> elpriser, String key ) {
         switch (key.toUpperCase()) {
             case "PRICE" -> elpriser.sort(Comparator.comparingDouble(ElpriserAPI.Elpris::sekPerKWh).reversed());
             case "TIME" -> elpriser.sort(Comparator.comparing(ElpriserAPI.Elpris::timeStart));
 
             default -> System.out.println("Invalid key");
         }
-        return elpriser;
     }
 
     /**
@@ -272,21 +270,6 @@ public class Main {
     }
 
     /**
-     * Confirms if the string confirms to YYYY-MM-DD format
-     *
-     * @param date string to check
-     * @return if the string is correctly formated, return it as a {@link LocalDate}, else return {@link LocalDate#now()}
-     */
-    private static LocalDate checkDate(String date) {
-        try {
-            return LocalDate.parse(date); }
-
-        catch (DateTimeParseException e) {
-            System.out.println("Invalid date");
-            return LocalDate.now(); }
-    }
-
-    /**
      * Formats a double to a string 100x the value with the pattern "0.00"
      *
      * @param price {@link Double} value to be formatted
@@ -352,7 +335,7 @@ public class Main {
     static void printStats (List<ElpriserAPI.Elpris> elpriser) {
 
         ElpriserAPI.Elpris min = minPrice(elpriser); //call once instead of checking for every output
-        ElpriserAPI.Elpris max = minPrice(elpriser);
+        ElpriserAPI.Elpris max = maxPrice(elpriser);
 
         printList(elpriser);
 
@@ -392,9 +375,13 @@ public class Main {
         Map<String, String> argMap = new HashMap<>();
 
         for (int i = 0; i < args.length; i ++) {
-            switch (args[i]) {
-                case "--zone", "--charging", "--date" -> argMap.put(args[i], args[i + 1]);
-                case "--sorted", "--help" -> argMap.put(args[i], "true");
+            if(Pattern.matches("^--.*", args[i])) {
+                if(i+1 < args.length) {
+                    argMap.put(args[i], args[i+1]);
+                }
+                else {
+                    argMap.put(args[i], "true");
+                }
             }
         }
 
@@ -415,7 +402,14 @@ public class Main {
             for (Map.Entry entry : argMap.entrySet()) {
                 switch ((String) entry.getKey()) {
                     case "--date" -> {
-                        date = checkDate(argMap.get("--date")); //set date to provided string if correctly formatted
+                        try {
+                            date = LocalDate.parse(argMap.get("--date")); //Checks if it a valid date and saves it if possible
+                        } catch (DateTimeParseException e) {
+                            System.out.println("Invalid date");
+                            date = LocalDate.now();
+                            return false;
+                        }
+
                         if (elpriserAPI.getPriser(date, zon).isEmpty()) { //if data for the desired date is unavailable we fall back to today
                             date = LocalDate.now();
                             System.out.println("No data found for " + argMap.get("--date") + " defaulting to " + date);
