@@ -7,6 +7,7 @@ import java.text.DecimalFormatSymbols;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -40,6 +41,7 @@ public class Main {
         }
         //parse given args and provide requested data if valid and available
         else {
+
             if(parseArgs(args)) { //parses the args and returns true if everything was valid
                 outputResult();
             }
@@ -52,7 +54,13 @@ public class Main {
      * @return List of {@link ElpriserAPI.Elpris} for specified {@link LocalDate}, will be empty if not available
      */
     private static List<ElpriserAPI.Elpris> priceOnDate () {
-            return elpriserAPI.getPriser(date, zon);
+        List<ElpriserAPI.Elpris> priceList = elpriserAPI.getPriser(date,zon);
+        if (priceList.size() > 24){
+            return combineSameHour(priceList);
+        }
+        else{
+            return priceList;
+        }
     }
 
     /**
@@ -61,7 +69,13 @@ public class Main {
      * @return List of {@link ElpriserAPI.Elpris} for specified {@link LocalDate}, will be empty if not available
      */
     private static List<ElpriserAPI.Elpris> priceOnNextDate () {
-        return elpriserAPI.getPriser(date.plusDays(1), zon);
+        List<ElpriserAPI.Elpris>  priceList = elpriserAPI.getPriser(date.plusDays(1), zon);
+        if (priceList.size() > 24){
+            return combineSameHour(priceList);
+        }
+        else {
+            return priceList;
+        }
     }
 
     /**
@@ -94,25 +108,13 @@ public class Main {
         if (prices.isEmpty()) return prices; //if the list is empty return it
 
         else {
+            Map<Integer, List<ElpriserAPI.Elpris>> groups = new TreeMap<>();
+            for (ElpriserAPI.Elpris p : prices) {
+                groups.computeIfAbsent(p.timeStart().getHour(), k -> new ArrayList<>()).add(p);
+            }
             List<ElpriserAPI.Elpris> combined = new ArrayList<>();
-            List<ElpriserAPI.Elpris> temp = new ArrayList<>();
-
-            while(!prices.isEmpty()) { //iterate through the entire list
-                //if there are no elements in the temp list or th temp list represents the same day add the element to it
-                if(temp.isEmpty() || prices.getFirst().timeStart().getHour() == temp.getFirst().timeStart().getHour()){
-                    temp.add(prices.getFirst());
-                }
-                //if first statement is false we combine the temp list to a single element and add it to the list before starting on the next day
-                else{
-                    combined.add(combine(temp));
-                    temp.clear();
-                    temp.add(prices.getFirst());
-                }
-                if(prices.size() == 1){ //if there is only a single element left we need to add temp and it before the loop ends
-                    combined.add(combine(temp));
-                    combined.add(prices.getFirst());
-                }
-                prices.removeFirst(); //removes element after we have handled it
+            for (List<ElpriserAPI.Elpris> group : groups.values()) {
+                combined.add(combine(group));
             }
             return combined;
         }
@@ -130,7 +132,7 @@ public class Main {
                 meanPriceEur(temp),
                 temp.getFirst().exr(),
                 temp.getFirst().timeStart(),
-                temp.getFirst().timeEnd()
+                temp.getLast().timeEnd()
         );
     }
 
@@ -259,13 +261,12 @@ public class Main {
      * @return if the string is correctly formated, return it as a {@link LocalDate}, else return {@link LocalDate#now()}
      */
     private static LocalDate checkDate(String date) {
-        if (Pattern.matches("^\\d{4}-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])$", date)){
-            return LocalDate.parse(date);
-        }
-        else {
+        try {
+            return LocalDate.parse(date); }
+
+        catch (DateTimeParseException e) {
             System.out.println("Invalid date");
-            return LocalDate.now();
-        }
+            return LocalDate.now(); }
     }
 
     /**
@@ -300,6 +301,7 @@ public class Main {
      */
     static void printList (List<ElpriserAPI.Elpris> elpriser) {
 
+        if(sorted){sortedPrices(elpriser, "PRICE");}
 
         for (ElpriserAPI.Elpris elpris : elpriser) {
             System.out.println(formatTime(elpris.timeStart()) + "-"
@@ -348,22 +350,6 @@ public class Main {
     }
 
     /**
-     * Similar to {@link #printStats(List)} but for lists of combined prices {@link #combineSameHour(List)}
-     *
-     * @param elpriser list of {@link ElpriserAPI.Elpris} to print from
-     */
-    static void printCombined (List<ElpriserAPI.Elpris> elpriser) {
-        printStats(elpriser); //print stats for all elements first
-        System.out.println();//for formatting
-
-        elpriser = combineSameHour(elpriser); //combine the list before printing stats
-        printStats(elpriser);
-
-        printMean((elpriser), false);
-
-    }
-
-    /**
      * Prints info about a list {@link ElpriserAPI.Elpris} as a charging window
      *
      * @param elpriser charging window as a list
@@ -371,11 +357,7 @@ public class Main {
     private static void printChargeStat (List<ElpriserAPI.Elpris> elpriser) {
 
         if(!elpriser.isEmpty()) {
-            //find earliest if the list is sorted by price
-            ElpriserAPI.Elpris earliest = sortedPrices(elpriser, "time").getFirst();
-
-
-            System.out.println("Påbörja laddning: kl " + formatTime(earliest.timeStart()) + ":00");
+            System.out.println("Påbörja laddning: kl " + formatTime(elpriser.getFirst().timeStart()) + ":00");
             printMean(elpriser, true);
             System.out.println();//For formatting
             printList(elpriser);
@@ -389,78 +371,89 @@ public class Main {
      * @return {@code TRUE} if arguments were parsed correctly, {@code FALSE} if something failed
      */
     private static boolean parseArgs(String[] args) {
-        if (args[0].equals("--zone")) { //First argument should always be a valid zone
+        Map<String, String> argMap = new HashMap<>();
 
-            if(Pattern.matches("^SE[1-4]$", args[1])) {
-                zon = ElpriserAPI.Prisklass.valueOf(args[1]);
-                for (int i = 2; i < args.length; i += 2) { //iterate other arg, allows for them to be any order
+        try {
+            for (int i = 0; i < args.length; i += 2) {
+                switch (args[i]) {
+                    case "--zone", "--charging", "--date" -> argMap.put(args[i], args[i + 1]);
+                    case "--sorted", "--help" -> {
+                        argMap.put(args[i], "true");
+                        i--;
+                    }
 
-                    if (args[i].equals("--date")) {
-                        date = checkDate(args[i + 1]); //set date to provided string if correctly formatted
-                        if (priceOnDate().isEmpty()) { //if data for the desired date is unavailable we fall back to today
+                    default -> {
+                        throw new IllegalArgumentException("Invalid argument: " + args[i]);
+                    }
+                }
+
+            }
+        } catch (IllegalArgumentException e) {
+            System.out.println(e.getMessage());
+            return false;
+        }
+
+        if (argMap.containsKey("--zone") && Pattern.matches("^SE[1-4]$", argMap.get("--zone"))) {
+                zon = ElpriserAPI.Prisklass.valueOf(argMap.get("--zone"));
+
+            for (Map.Entry entry : argMap.entrySet()) {
+                switch ((String) entry.getKey()) {
+                    case "--date" -> {
+                        date = checkDate(argMap.get("--date")); //set date to provided string if correctly formatted
+                        if (elpriserAPI.getPriser(date, zon).isEmpty()) { //if data for the desired date is unavailable we fall back to today
                             date = LocalDate.now();
-                            System.out.println("No data found for " + args[i+1] + " defaulting to " + date);
+                            System.out.println("No data found for " + argMap.get("--date") + " defaulting to " + date);
                         }
                     }
 
-                    else if (args[i].equals("--charging") && Pattern.matches("^[248]h$", args[i + 1])) {
-                        window = Integer.parseInt(String.valueOf(args[i + 1].charAt(0)));
+                    case "--charging" -> {
+                        if(Pattern.matches("^[248]h$", argMap.get("--charging"))) {
+                            window = Integer.parseInt(String.valueOf(argMap.get("--charging").charAt(0)));
+                        }
+                        else {
+                            System.out.println("Invalid charging window: " + argMap.get("--charging"));
+                            return false;
+                        }
                     }
 
-                    else if (args[i].equals("--sorted")) {
+                    case "--sorted" -> {
                         sorted = true;
-                        i--; //since args isn't a pair and the loop iterates by two
                     }
 
-                    else {
-                        System.out.println("Invalid argument" + args[i]);
+                    case "--help" -> {
                         help();
-                        return false;
                     }
                 }
             }
-            else{
+        }
+        else {
                 System.out.println("Invalid zone");
                 return false;
             }
-        }
-        else  {
+
+        if (zon == null) {
             System.out.println("Zone required");
             //disabled interactive prompt to pass tests
             //zon = ElpriserAPI.Prisklass.valueOf(System.console().readLine("Zone: "));
             return false;
         }
-        return true;
+
+        else {
+            return true;
+        }
     }
 
     /**
      * Prints stats based on flags set with {@link #parseArgs(String[])}
      */
     private static void outputResult (){
-        if(priceOnDate().isEmpty()) { //ensure there is data
+        if(elpriserAPI.getPriser(date,zon).isEmpty()) { //ensure there is data
             System.out.println("No data");
         }
         else {
-            if (window != 24) { //if a valid charging window was requested
-                if (sorted) {
-                    printChargeStat(sortedPrices(optimalWindow(priceRealDay(), window), "price")); //sorted by price
-                } else { printChargeStat(optimalWindow(priceRealDay(), window)); //default sorting
-                }
-
-            }
-
-            else { //if no window was requested print stats for the whole day
-                if (sorted) { //sorted by price
-                    if (priceOnDate().size() <= 24) {
-                        printStats(sortedPrices(priceRealDay(), "price"));
-                    } else printCombined(sortedPrices(priceRealDay(), "price"));
-                } else { //default sorting
-                    if (priceOnDate().size() <= 24) {
-                        printStats(priceRealDay());
-                    } else {
-                        printCombined(priceRealDay());
-                    }
-                }
+            switch (window) {
+                case 24 -> printStats(priceRealDay());
+                default -> printChargeStat(optimalWindow(priceRealDay(), window));
             }
         }
     }
